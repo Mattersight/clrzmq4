@@ -60,11 +60,11 @@ namespace ZeroMQ
 
 		public static readonly int MinimumFrameSize = zmq.sizeof_zmq_msg_t;
 
-		private DispoIntPtr _framePtr;
+		private DispoIntPtr framePtr;
 
-		private int _capacity;
+		private int length;
 
-		private int _position;
+		private int position;
 
 		// private ZeroMQ.lib.FreeMessageDelegate _freePtr;
 
@@ -145,12 +145,12 @@ namespace ZeroMQ
 			: this(Alloc(data, size), size)
 		{ } */
 
-		protected ZFrame(DispoIntPtr framePtr, int size)
+		protected ZFrame(DispoIntPtr frameIntPtr, int size)
 			: base()
 		{
-			_framePtr = framePtr;
-			_capacity = size;
-			_position = 0;
+			framePtr = frameIntPtr;
+			length = size;
+			position = 0;
 		}
 
 		~ZFrame()
@@ -231,28 +231,30 @@ namespace ZeroMQ
 
 		protected override void Dispose(bool disposing)
 		{
-			if (_framePtr != null)
+			if (framePtr != null)
 			{
-				if (_framePtr.Ptr != IntPtr.Zero)
+				if (framePtr.Ptr != IntPtr.Zero)
 				{
 					Close();
 				}
 			}
+			GC.SuppressFinalize(this);
 			base.Dispose(disposing);
 		}
 
 		public void Dismiss()
 		{
-			if (_framePtr != null)
+			if (framePtr != null)
 			{
-				_framePtr.Dispose();
-				_framePtr = null;
+				framePtr.Dispose();
+				framePtr = null;
 			}
+			GC.SuppressFinalize(this);
 		}
 
 		public bool IsDismissed
 		{
-			get { return _framePtr == null; }
+			get { return framePtr == null; }
 		}
 
 		public override bool CanRead { get { return true; } }
@@ -265,13 +267,13 @@ namespace ZeroMQ
 
 		private void EnsureCapacity()
 		{
-			if (_framePtr != IntPtr.Zero)
+			if (framePtr != IntPtr.Zero)
 			{
-				_capacity = zmq.msg_size(_framePtr);
+				length = zmq.msg_size(framePtr);
 			}
 			else
 			{
-				_capacity = -1;
+				length = -1;
 			}
 		}
 
@@ -280,7 +282,7 @@ namespace ZeroMQ
 			get
 			{
 				EnsureCapacity();
-				return _capacity;
+				return length;
 			}
 		}
 
@@ -291,62 +293,50 @@ namespace ZeroMQ
 
 		public override long Position
 		{
-			get
-			{
-				return _position;
-			}
+			get { return position; }
 			set
 			{
-				if (value == 0)
-				{
-					_position = 0;
-					return;
-				}
-				if (value < 0 || (Length == -1 || value > Length))
-				{
-					throw new IndexOutOfRangeException();
-				}
-				_position = (int)value;
+				Seek(value, SeekOrigin.Begin);
 			}
 		}
 
-		public IntPtr Ptr { get { return _framePtr; } }
+		public IntPtr Ptr { get { return framePtr; } }
 
 		public IntPtr DataPtr()
 		{
-			if (_framePtr == IntPtr.Zero)
+			if (framePtr == IntPtr.Zero)
 			{
 				return IntPtr.Zero;
 			}
-			return zmq.msg_data(_framePtr);
+			return zmq.msg_data(framePtr);
 		}
 
 		public override long Seek(long offset, SeekOrigin origin)
 		{
 			long pos;
 			if (origin == SeekOrigin.Current)
-				pos = Position + offset;
+				pos = position + offset;
 			else if (origin == SeekOrigin.End)
 				pos = Length + offset;
 			else // if (origin == SeekOrigin.Begin)
 				pos = offset;
 
-			if (pos < 0 || (Length > 0 && pos > Length))
+			if (pos < 0 || pos > Length)
 				throw new ArgumentOutOfRangeException("offset");
 
-			_position = (int)pos;
+			position = (int)pos;
 			return pos;
 		}
 
 		public byte[] Read()
 		{
-			int remaining = Math.Max(0, (int)(Length - Position));
+			int remaining = Math.Max(0, (int)(Length - position));
 			return Read(remaining);
 		}
 
 		public byte[] Read(int count)
 		{
-			int remaining = Math.Min(count, Math.Max(0, (int)(Length - Position)));
+			int remaining = Math.Min(count, Math.Max(0, (int)(Length - position)));
 			if (remaining == 0) {
 				return new byte[0];
 			}
@@ -361,7 +351,7 @@ namespace ZeroMQ
 
 		public override int Read(byte[] buffer, int offset, int count)
 		{
-			int remaining = Math.Min(count, Math.Max(0, (int)(Length - Position)));
+			int remaining = Math.Min(count, Math.Max(0, (int)(Length - position)));
 			if (remaining == 0) {
 				return 0;
 			}
@@ -369,29 +359,29 @@ namespace ZeroMQ
 			{
 				return -1;
 			}
-			Marshal.Copy(DataPtr() + _position, buffer, offset, (int)remaining);
+			Marshal.Copy(DataPtr() + position, buffer, offset, (int)remaining);
 
-			_position += remaining;
+			position += remaining;
 			return remaining;
 		}
 
 		public override int ReadByte()
 		{
-			if (Position + 1 > Length)
+			if (position + 1 > Length)
 				return -1;
 
-			int byt = Marshal.ReadByte(DataPtr() + (int)_position);
-			++_position;
+			int byt = Marshal.ReadByte(DataPtr() + (int)position);
+			++position;
 			return byt;
 		}
 
 		public virtual byte ReadAsByte()
 		{
-			if (Position + 1 > Length)
+			if (position + 1 > Length)
 				return default(byte);
 
-			byte byt = Marshal.ReadByte(DataPtr() + _position);
-			++_position;
+			byte byt = Marshal.ReadByte(DataPtr() + position);
+			++position;
 			return byt;
 		}
 
@@ -486,121 +476,17 @@ namespace ZeroMQ
 
 		public string ReadString(Encoding encoding)
 		{
-			return ReadString( /* byteCount */ (int)Length, encoding);
+			return ReadString( /* byteCount */ (int)Length - position, encoding);
 		}
 
 		public string ReadString(int length)
 		{
-			return ReadString( /* byteCount */ length, ZContext.Encoding);
+			return ReadString(/* byteCount */ length, ZContext.Encoding);
 		}
 
-		public string ReadString(int length, Encoding encoding)
+		public string ReadString(int byteCount, Encoding encoding)
 		{
-			if (length < 0)
-			{
-				throw new ArgumentOutOfRangeException("length");
-			}
-			if (length == 0)
-			{
-				return string.Empty;
-			}
-
-			long start = Position, lengthToRead = 0;
-			int bytE = -1, lengthToMove = 0;
-			byte byt = 0x00; //, lastByt = 0x00;
-
-			while (this._position < length)
-			{
-				bytE = ReadByte();
-				if (bytE == -1) break;
-				byt = (byte)bytE;
-
-				if (byt == 0x00) // NUL
-				{
-					++lengthToMove;
-					break;
-				}
-
-				++lengthToRead;
-				lengthToMove = 0;
-				// lastByt = byt;
-			}
-
-			string strg = null;
-
-			if (lengthToRead > 0)
-			{
-				this._position = (int)start;
-
-				strg = ReadStringNative((int)lengthToRead, encoding);
-			}
-			if (lengthToMove > 0)
-			{
-				this._position += lengthToMove;
-			}
-
-			return strg ?? string.Empty;
-		}
-
-		public string ReadLine()
-		{
-			return ReadLine(ZContext.Encoding);
-		}
-
-		public string ReadLine(Encoding encoding)
-		{
-			long start = Position, length = Length, lengthToRead = 0;
-			int bytE = -1, lengthToMove = 0;
-			byte byt = 0x00, lastByt = 0x00;
-
-			while (this._position < length)
-			{
-				bytE = ReadByte();
-				if (bytE == -1) break;
-				byt = (byte)bytE;
-
-				if (byt == 0x00) // NUL
-				{
-					++lengthToMove;
-					break;
-				}
-
-				if (byt == 0x0A) // Line Feed
-				{
-					if (lastByt == 0x0D) // Carriage Return
-					{
-						++lengthToMove;
-						--lengthToRead;
-					}
-
-					++lengthToMove;
-					break;
-				}
-
-				++lengthToRead;
-				lengthToMove = 0;
-				lastByt = byt;
-			}
-
-			string strg = null;
-
-			if (lengthToRead > 0)
-			{
-				this._position = (int)start;
-
-				strg = ReadStringNative((int)lengthToRead, encoding);
-			}
-			if (lengthToMove > 0)
-			{
-				this._position += lengthToMove;
-			}
-
-			return strg ?? string.Empty;
-		}
-
-		unsafe internal string ReadStringNative(int byteCount, Encoding encoding)
-		{
-			int remaining = Math.Min(byteCount, Math.Max(0, (int)(this.Length - this._position)));
+			int remaining = Math.Min(byteCount, Math.Max(0, (int)Length - position));
 			if (remaining == 0)
 			{
 				return string.Empty;
@@ -610,44 +496,134 @@ namespace ZeroMQ
 				return null;
 			}
 
-			var bytes = (byte*)(this.DataPtr() + this._position);
+			unsafe
+			{
+				var bytes = (byte*)(this.DataPtr() + position);
 
-			Decoder dec = encoding.GetDecoder();
-			int charCount = dec.GetCharCount(bytes, remaining, false);
-			if (charCount == 0)
+				Decoder dec = encoding.GetDecoder();
+				int charCount = dec.GetCharCount(bytes, remaining, false);
+				if (charCount == 0)
+				{
+					return string.Empty;
+				}
+
+				var resultChars = new char[charCount];
+				fixed (char* chars = resultChars)
+				{
+					charCount = dec.GetChars(bytes, remaining, chars, charCount, true);
+
+					int i = -1, z = 0;
+					while (i < charCount)
+					{
+						++i;
+
+						if (chars[i] == '\0')
+						{
+							charCount = i;
+							++z;
+
+							break;
+						}
+					}
+
+					Encoder enc = encoding.GetEncoder();
+					position += enc.GetByteCount(chars, charCount + z, true);
+
+					if (charCount == 0) return string.Empty;
+					return new string(chars, 0, charCount);
+				}
+			}
+		}
+
+		public string ReadLine()
+		{
+			return ReadLine((int)Length - position, ZContext.Encoding);
+		}
+
+		public string ReadLine(Encoding encoding)
+		{
+			return ReadLine((int)Length - position, encoding);
+		}
+
+		public string ReadLine(int byteCount, Encoding encoding)
+		{
+			int remaining = Math.Min(byteCount, Math.Max(0, (int)Length - position));
+			if (remaining == 0)
 			{
 				return string.Empty;
 			}
-
-			remaining = Math.Min(charCount, remaining);
-
-			var resultChars = new char[charCount];
-			fixed (char* chars = resultChars)
+			if (remaining < 0)
 			{
-				charCount = dec.GetChars(bytes, remaining, chars, charCount, true);
-				this._position += remaining;
-				return new string(chars, 0, charCount);
+				return null;
+			}
+
+			unsafe
+			{
+				var bytes = (byte*)(this.DataPtr() + position);
+
+				Decoder dec = encoding.GetDecoder();
+				int charCount = dec.GetCharCount(bytes, remaining, false);
+				if (charCount == 0) return string.Empty;
+
+				var resultChars = new char[charCount];
+				fixed (char* chars = resultChars)
+				{
+					charCount = dec.GetChars(bytes, remaining, chars, charCount, true);
+
+					int i = -1, z = 0;
+					while (i < charCount)
+					{
+						++i;
+
+						if (chars[i] == '\n')
+						{
+							charCount = i;
+							++z;
+
+							if (i - 1 > -1 && chars[i - 1] == '\r')
+							{
+								--charCount;
+								++z;
+							}
+
+							break;
+						}
+						if (chars[i] == '\0')
+						{
+							charCount = i;
+							++z;
+
+							break;
+						}
+					}
+
+					Encoder enc = encoding.GetEncoder();
+					position += enc.GetByteCount(chars, charCount + z, true);
+
+					if (charCount == 0) return string.Empty;
+					return new string(chars, 0, charCount);
+				}
 			}
 		}
 
 		public override void Write(byte[] buffer, int offset, int count)
 		{
-			if (Position + count > Length)
+			if (position + count > Length)
 			{
 				throw new InvalidOperationException();
 			}
-			Marshal.Copy(buffer, offset, DataPtr() + _position, count);
-			_position += count;
+			Marshal.Copy(buffer, offset, DataPtr() + position, count);
+			position += count;
 		}
 
 		public virtual void Write(byte value)
 		{
-			if (Position + 1 > Length)
+			if (position + 1 > Length)
 			{
 				throw new InvalidOperationException();
 			}
-			Marshal.WriteByte(DataPtr() + _position, value);
-			++_position;
+			Marshal.WriteByte(DataPtr() + position, value);
+			++position;
 		}
 
 		public override void WriteByte(byte value)
@@ -657,12 +633,12 @@ namespace ZeroMQ
 
 		public void Write(Int16 value)
 		{
-			if (Position + 2 > Length)
+			if (position + 2 > Length)
 			{
 				throw new InvalidOperationException();
 			}
-			Marshal.WriteInt16(DataPtr() + _position, value);
-			_position += 2;
+			Marshal.WriteInt16(DataPtr() + position, value);
+			position += 2;
 		}
 
 		public void Write(UInt16 value)
@@ -677,12 +653,12 @@ namespace ZeroMQ
 
 		public void Write(Int32 value)
 		{
-			if (Position + 4 > Length)
+			if (position + 4 > Length)
 			{
 				throw new InvalidOperationException();
 			}
-			Marshal.WriteInt32(DataPtr() + _position, value);
-			_position += 4;
+			Marshal.WriteInt32(DataPtr() + position, value);
+			position += 4;
 		}
 
 		public void Write(UInt32 value)
@@ -692,12 +668,12 @@ namespace ZeroMQ
 
 		public void Write(Int64 value)
 		{
-			if (Position + 8 > Length)
+			if (position + 8 > Length)
 			{
 				throw new InvalidOperationException();
 			}
-			Marshal.WriteInt64(DataPtr() + _position, value);
-			_position += 8;
+			Marshal.WriteInt64(DataPtr() + position, value);
+			position += 8;
 		}
 
 		public void Write(UInt64 value)
@@ -735,9 +711,9 @@ namespace ZeroMQ
 			{
 				if (create)
 				{
-					this._framePtr = CreateNative(0);
-					this._capacity = 0;
-					this._position = 0;
+					this.framePtr = CreateNative(0);
+					this.length = 0;
+					this.position = 0;
 				}
 				return;
 			}
@@ -751,18 +727,18 @@ namespace ZeroMQ
 
 				if (create)
 				{
-					this._framePtr = CreateNative(byteCount);
-					this._capacity = byteCount;
-					this._position = 0;
+					this.framePtr = CreateNative(byteCount);
+					this.length = byteCount;
+					this.position = 0;
 				}
-				else if (this._position + byteCount > this.Length)
+				else if (this.position + byteCount > this.Length)
 				{
 					// fail if frame is too small
 					throw new InvalidOperationException();
 				}
 
-				byteCount = enc.GetBytes(strP, charCount, (byte*)(this.DataPtr() + this._position), byteCount, true);
-				this._position += byteCount;
+				byteCount = enc.GetBytes(strP, charCount, (byte*)(this.DataPtr() + this.position), byteCount, true);
+				this.position += byteCount;
 			}
 		}
 
@@ -773,17 +749,17 @@ namespace ZeroMQ
 
 		public override void Close()
 		{
-			if (_framePtr == null)
+			if (framePtr == null)
 				return;
 
-			if (_framePtr.Ptr == IntPtr.Zero)
+			if (framePtr.Ptr == IntPtr.Zero)
 			{
 				Dismiss();
 				return;
 			}
 
 			ZError error;
-			while (-1 == zmq.msg_close(_framePtr))
+			while (-1 == zmq.msg_close(framePtr))
 			{
 				error = ZError.GetLastErr();
 
@@ -808,7 +784,7 @@ namespace ZeroMQ
 		{
 			// zmq.msg_copy(dest, src)
 			ZError error;
-			while (-1 == zmq.msg_copy(other._framePtr, _framePtr))
+			while (-1 == zmq.msg_copy(other.framePtr, framePtr))
 			{
 				error = ZError.GetLastErr();
 
@@ -829,7 +805,7 @@ namespace ZeroMQ
 		{
 			// zmq.msg_copy(dest, src)
 			ZError error;
-			while (-1 == zmq.msg_move(other._framePtr, _framePtr))
+			while (-1 == zmq.msg_move(other.framePtr, framePtr))
 			{
 				error = ZError.GetLastErr();
 
@@ -865,7 +841,7 @@ namespace ZeroMQ
 			error = ZError.None;
 
 			int result;
-			if (-1 == (result = zmq.msg_get(this._framePtr, (Int32)property)))
+			if (-1 == (result = zmq.msg_get(this.framePtr, (Int32)property)))
 			{
 				error = ZError.GetLastErr();
 				return -1;
@@ -894,7 +870,7 @@ namespace ZeroMQ
 			using (var propertyPtr = DispoIntPtr.AllocString(property))
 			{
 				IntPtr resultPtr;
-				if (IntPtr.Zero == (resultPtr = zmq.msg_gets(this._framePtr, propertyPtr)))
+				if (IntPtr.Zero == (resultPtr = zmq.msg_gets(this.framePtr, propertyPtr)))
 				{
 					error = ZError.GetLastErr();
 					return null;
@@ -932,7 +908,7 @@ namespace ZeroMQ
 		{
 			if (Length > -1)
 			{
-				long old = Position;
+				long old = position;
 				Position = 0;
 				string retur = ReadString(encoding);
 				Position = old;

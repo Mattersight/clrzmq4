@@ -2,6 +2,8 @@ bin/*
 obj/*
 *.user
 *.userprefs
+*.sln
+*.suo
 *.old*
 *.nupkg
 amd64/v*

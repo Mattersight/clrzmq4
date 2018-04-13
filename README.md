@@ -3,14 +3,14 @@
 
 Hello. I've made a new ZeroMQ namespace for .NET Framework 4+ and mono 3+.
 
-ZeroMQ is built AnyCPU, to run on Windows (VC2010) and on GNU/Linux (C 4.8.2), i386 and amd64.
+ZeroMQ is built AnyCPU, to run on Windows (VC2010) and on GNU/Linux (C 4.8.4), i386 and amd64.
 
 Get it
 - by [downloading the Release](https://github.com/zeromq/clrzmq4/releases)
 - using `git clone https://github.com/zeromq/clrzmq4`
 - using [nuget](https://www.nuget.org/packages/ZeroMQ/) `PM> Install-Package ZeroMQ` or by [downloading the nupkg](https://packages.nuget.org/api/v1/package/ZeroMQ/)
 
-Read [ZeroMQ - The Guide](http://zguide.zeromq.org/page:all)
+Read [ZeroMQ - The Guide](http://zguide.zeromq.org/cs:all)
 - ZeroMQ - The Guide [Examples in C#](http://github.com/metadings/zguide/tree/master/examples/C%23)
 
 Ask questions on [stackoverflow](http://stackoverflow.com/questions/tagged/c%23+zeromq) using tags `C#``ZeroMQ` !
@@ -197,4 +197,4 @@ public static void WUServer(string[] args)
 
 Also look into the [WUProxy](https://github.com/metadings/zguide/blob/master/examples/C%23/wuproxy.cs) Example.
 
-Learn more: ZeroMQ - [The Guide](http://zguide.zeromq.org/page:all) and the [Examples in C#](http://github.com/metadings/zguide/tree/master/examples/C%23)
+Learn more: ZeroMQ - [The Guide](http://zguide.zeromq.org/cs:all) and the [Examples in C#](http://github.com/metadings/zguide/tree/master/examples/C%23)
