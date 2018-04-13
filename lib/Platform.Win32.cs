@@ -71,8 +71,12 @@
 				}
 
 				// Search ManifestResources/fileName.arch.ext
-				path = Path.Combine(Path.GetTempPath(), fileName);
-				string resourceName = string.Format(string.Format("ZeroMQ.{0}.{1}{2}", libraryName, arch, LibraryFileExtension));
+				var executingAssemblyCodeBase = Assembly.GetExecutingAssembly().CodeBase;
+				var executingAssemblyUri = new UriBuilder(executingAssemblyCodeBase);
+				var unescapedExecutingAssemblyUri = Uri.UnescapeDataString(executingAssemblyUri.Path);
+				var executingAssemblyDirectory = Path.GetDirectoryName(unescapedExecutingAssemblyUri);
+				path = Path.Combine(executingAssemblyDirectory, fileName);
+				string resourceName = string.Format(string.Format("ZeroMQ.{0}.{1}{2}", arch, libraryName, LibraryFileExtension));
 
 				if (ExtractManifestResource(resourceName, path))
 				{
